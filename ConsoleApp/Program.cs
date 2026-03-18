@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Xml.Serialization;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Text.RegularExpressions;
 
 namespace TextFileEditor {
@@ -24,7 +24,7 @@ namespace TextFileEditor {
 
   // Class representing a text file with serialization capabilities
   [Serializable]
-  public class TextDocument {
+  public class TextFile {
 
     public string FilePath { get; set; }
     public string Content { get; set; }
@@ -32,14 +32,14 @@ namespace TextFileEditor {
     public Dictionary<string, int> WordFrequency { get; set; }
 
     // Default constructor for serialization
-    public TextDocument() {
+    public TextFile() {
       FilePath = string.Empty;
       Content = string.Empty;
       LastModified = DateTime.Now;
       WordFrequency = new Dictionary<string, int>();
     }
 
-    public TextDocument(string filePath) {
+    public TextFile(string filePath) {
       if (string.IsNullOrWhiteSpace(filePath)) {
         throw new ArgumentException("File path cannot be empty.");
       }
@@ -55,7 +55,7 @@ namespace TextFileEditor {
       }
     }
 
-    public TextDocument(string filePath, string content) : this(filePath) {
+    public TextFile(string filePath, string content) : this(filePath) {
       Content = content;
       UpdateWordFrequency();
     }
@@ -83,7 +83,7 @@ namespace TextFileEditor {
     }
 
     // Update word frequency dictionary
-    private void UpdateWordFrequency() {
+    public void UpdateWordFrequency() {
       WordFrequency.Clear();
 
       if (string.IsNullOrWhiteSpace(Content)) {
@@ -104,47 +104,52 @@ namespace TextFileEditor {
       }
     }
 
-    // Binary serialization
-    public void BinarySerialize(string targetFilePath = null) {
-      string filePath = targetFilePath ?? FilePath + ".bin";
+    // JSON serialization using System.Text.Json
+    public void JsonSerialize(string targetFilePath = null) {
+      string filePath = targetFilePath ?? FilePath + ".json";
 
-      using (FileStream fileStream = new FileStream(filePath, FileMode.Create)) {
-        BinaryFormatter formatter = new BinaryFormatter();
-        formatter.Serialize(fileStream, this);
-      }
+      JsonSerializerOptions options = new JsonSerializerOptions {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+      };
+      
+      string json = JsonSerializer.Serialize(this, options);
+      File.WriteAllText(filePath, json, Encoding.UTF8);
     }
 
-    // Binary deserialization
-    public static TextDocument BinaryDeserialize(string filePath) {
+    // JSON deserialization using System.Text.Json
+    public static TextFile JsonDeserialize(string filePath) {
       if (!File.Exists(filePath)) {
         throw new FileNotFoundException(filePath);
       }
 
-      using (FileStream fileStream = new FileStream(filePath, FileMode.Open)) {
-        BinaryFormatter formatter = new BinaryFormatter();
-        return (TextDocument)formatter.Deserialize(fileStream);
-      }
+      string json = File.ReadAllText(filePath, Encoding.UTF8);
+      JsonSerializerOptions options = new JsonSerializerOptions {
+        PropertyNameCaseInsensitive = true
+      };
+      
+      return JsonSerializer.Deserialize<TextFile>(json, options);
     }
 
     // XML serialization
     public void XmlSerialize(string targetFilePath = null) {
       string filePath = targetFilePath ?? FilePath + ".xml";
 
-      XmlSerializer serializer = new XmlSerializer(typeof(TextDocument));
+      XmlSerializer serializer = new XmlSerializer(typeof(TextFile));
       using (StreamWriter writer = new StreamWriter(filePath, false, Encoding.UTF8)) {
         serializer.Serialize(writer, this);
       }
     }
 
     // XML deserialization
-    public static TextDocument XmlDeserialize(string filePath) {
+    public static TextFile XmlDeserialize(string filePath) {
       if (!File.Exists(filePath)) {
         throw new FileNotFoundException(filePath);
       }
 
-      XmlSerializer serializer = new XmlSerializer(typeof(TextDocument));
+      XmlSerializer serializer = new XmlSerializer(typeof(TextFile));
       using (StreamReader reader = new StreamReader(filePath, Encoding.UTF8)) {
-        return (TextDocument)serializer.Deserialize(reader);
+        return (TextFile)serializer.Deserialize(reader);
       }
     }
 
@@ -160,12 +165,12 @@ namespace TextFileEditor {
   }
 
   // Memento class for undo/redo functionality
-  public class TextDocumentMemento {
+  public class TextFileMemento {
 
     public string Content { get; private set; }
     public DateTime Timestamp { get; private set; }
 
-    public TextDocumentMemento(string content) {
+    public TextFileMemento(string content) {
       Content = content;
       Timestamp = DateTime.Now;
     }
@@ -173,54 +178,52 @@ namespace TextFileEditor {
   }
 
   // Originator class that creates and restores mementos
-  public class TextDocumentOriginator {
+  public class TextFileOriginator {
 
-    private TextDocument _document;
+    private TextFile _textFile;
 
-    public TextDocumentOriginator(TextDocument document) {
-      _document = document ?? throw new ArgumentNullException(nameof(document));
+    public TextFileOriginator(TextFile textFile) {
+      _textFile = textFile ?? throw new ArgumentNullException(nameof(textFile));
     }
 
-    public TextDocumentMemento SaveState() {
-      return new TextDocumentMemento(_document.Content);
+    public TextFileMemento SaveState() {
+      return new TextFileMemento(_textFile.Content);
     }
 
-    public void RestoreState(TextDocumentMemento memento) {
+    public void RestoreState(TextFileMemento memento) {
       if (memento == null) {
         throw new ArgumentNullException(nameof(memento));
       }
 
-      _document.Content = memento.Content;
-      _document.LastModified = DateTime.Now;
-      
-      // Update word frequency after restore
-      // This would require access to private method - in real app we'd have a public method
-      // For simplicity, we'll assume the document updates itself when content changes
+      _textFile.Content = memento.Content;
+      _textFile.LastModified = DateTime.Now;
+      _textFile.UpdateWordFrequency();
     }
-
   }
 
   // Caretaker class for managing undo/redo history
-  public class TextDocumentHistory {
+  public class TextFileHistory {
 
-    private List<TextDocumentMemento> _undoStack = new List<TextDocumentMemento>();
-    private List<TextDocumentMemento> _redoStack = new List<TextDocumentMemento>();
-    private TextDocumentOriginator _originator;
+    private List<TextFileMemento> _undoStack = new List<TextFileMemento>();
+    private List<TextFileMemento> _redoStack = new List<TextFileMemento>();
+    private TextFileOriginator _originator;
     private int _maxHistorySize;
+    private TextFileMemento _initialState;
 
-    public bool CanUndo => _undoStack.Count > 0;
+    public bool CanUndo => _undoStack.Count > 1; // Keep at least initial state
     public bool CanRedo => _redoStack.Count > 0;
 
-    public TextDocumentHistory(TextDocument document, int maxHistorySize = 50) {
-      _originator = new TextDocumentOriginator(document);
+    public TextFileHistory(TextFile textFile, int maxHistorySize = 50) {
+      _originator = new TextFileOriginator(textFile);
       _maxHistorySize = maxHistorySize;
       
       // Save initial state
-      SaveState();
+      _initialState = _originator.SaveState();
+      _undoStack.Add(_initialState);
     }
 
     public void SaveState() {
-      TextDocumentMemento memento = _originator.SaveState();
+      TextFileMemento memento = _originator.SaveState();
       _undoStack.Add(memento);
       
       // Limit history size
@@ -234,32 +237,41 @@ namespace TextFileEditor {
 
     public void Undo() {
       if (!CanUndo) {
-        throw new InvalidOperationException("Nothing to undo.");
+        // If only initial state exists, restore it
+        if (_undoStack.Count == 1) {
+          _originator.RestoreState(_initialState);
+        }
+        return;
       }
 
       // Move current state to redo stack
-      TextDocumentMemento currentState = _originator.SaveState();
+      TextFileMemento currentState = _originator.SaveState();
       _redoStack.Add(currentState);
 
       // Remove current state from undo stack
       _undoStack.RemoveAt(_undoStack.Count - 1);
 
-      // Restore previous state if available
-      if (_undoStack.Count > 0) {
-        _originator.RestoreState(_undoStack[_undoStack.Count - 1]);
-      }
+      // Restore previous state
+      _originator.RestoreState(_undoStack[_undoStack.Count - 1]);
     }
 
     public void Redo() {
       if (!CanRedo) {
-        throw new InvalidOperationException("Nothing to redo.");
+        return;
       }
 
-      TextDocumentMemento redoState = _redoStack[_redoStack.Count - 1];
+      TextFileMemento redoState = _redoStack[_redoStack.Count - 1];
       _redoStack.RemoveAt(_redoStack.Count - 1);
 
       _originator.RestoreState(redoState);
       _undoStack.Add(redoState);
+    }
+
+    public void ResetToInitialState() {
+      _originator.RestoreState(_initialState);
+      _undoStack.Clear();
+      _redoStack.Clear();
+      _undoStack.Add(_initialState);
     }
 
   }
@@ -354,8 +366,8 @@ namespace TextFileEditor {
 
         foreach (string file in files) {
           try {
-            TextDocument document = new TextDocument(file);
-            index.AddDocument(document);
+            TextFile textFile = new TextFile(file);
+            index.AddFile(textFile);
           } catch (Exception exception) {
             // Skip files that can't be read
             Console.WriteLine($"Warning: Could not index {file} - {exception.Message}");
@@ -418,28 +430,28 @@ namespace TextFileEditor {
 
     public string RootDirectory { get; private set; }
     public DateTime IndexedAt { get; private set; }
-    public List<TextDocument> Documents { get; private set; }
+    public List<TextFile> Files { get; private set; }
     public Dictionary<string, List<string>> KeywordIndex { get; private set; }
 
     public FileIndex(string rootDirectory) {
       RootDirectory = rootDirectory;
       IndexedAt = DateTime.Now;
-      Documents = new List<TextDocument>();
+      Files = new List<TextFile>();
       KeywordIndex = new Dictionary<string, List<string>>();
     }
 
-    public void AddDocument(TextDocument document) {
-      Documents.Add(document);
+    public void AddFile(TextFile textFile) {
+      Files.Add(textFile);
 
-      foreach (KeyValuePair<string, int> wordFrequency in document.WordFrequency) {
+      foreach (KeyValuePair<string, int> wordFrequency in textFile.WordFrequency) {
         string keyword = wordFrequency.Key;
         
         if (!KeywordIndex.ContainsKey(keyword)) {
           KeywordIndex[keyword] = new List<string>();
         }
 
-        if (!KeywordIndex[keyword].Contains(document.FilePath)) {
-          KeywordIndex[keyword].Add(document.FilePath);
+        if (!KeywordIndex[keyword].Contains(textFile.FilePath)) {
+          KeywordIndex[keyword].Add(textFile.FilePath);
         }
       }
     }
@@ -470,7 +482,7 @@ namespace TextFileEditor {
       stringBuilder.AppendLine($"=== FILE INDEX ===");
       stringBuilder.AppendLine($"Root: {RootDirectory}");
       stringBuilder.AppendLine($"Indexed: {IndexedAt}");
-      stringBuilder.AppendLine($"Documents: {Documents.Count}");
+      stringBuilder.AppendLine($"Files: {Files.Count}");
       stringBuilder.AppendLine($"Unique keywords: {KeywordIndex.Count}");
       stringBuilder.AppendLine("==================");
 
@@ -482,8 +494,8 @@ namespace TextFileEditor {
   // Simple console text editor
   public class TextEditor {
 
-    private TextDocument _currentDocument;
-    private TextDocumentHistory _history;
+    private TextFile _currentFile;
+    private TextFileHistory _history;
     private bool _isRunning;
 
     public void Run() {
@@ -495,7 +507,7 @@ namespace TextFileEditor {
       Console.WriteLine(welcomeMessage);
 
       while (_isRunning) {
-        if (_currentDocument == null) {
+        if (_currentFile == null) {
           ShowMainMenu();
         } else {
           ShowEditingMenu();
@@ -537,16 +549,17 @@ namespace TextFileEditor {
 
     private void ShowEditingMenu() {
       string menu = "\n--- EDITING MENU ---\n" +
-                   $"Current file: {_currentDocument.FilePath}\n" +
+                   $"Current file: {_currentFile.FilePath}\n" +
                    "1. View content\n" +
                    "2. Edit content\n" +
                    "3. Save\n" +
                    "4. Save as...\n" +
                    "5. Undo\n" +
                    "6. Redo\n" +
-                   "7. Binary serialize\n" +
-                   "8. XML serialize\n" +
-                   "9. Close file\n" +
+                   "7. Reset to initial state\n" +
+                   "8. JSON serialize\n" +
+                   "9. XML serialize\n" +
+                   "10. Close file\n" +
                    "Your choice: ";
       Console.Write(menu);
 
@@ -578,14 +591,18 @@ namespace TextFileEditor {
           break;
 
         case "7":
-          BinarySerialize();
+          ResetToInitialState();
           break;
 
         case "8":
-          XmlSerialize();
+          JsonSerialize();
           break;
 
         case "9":
+          XmlSerialize();
+          break;
+
+        case "10":
           CloseFile();
           break;
 
@@ -601,15 +618,15 @@ namespace TextFileEditor {
       string filePath = Console.ReadLine();
 
       try {
-        _currentDocument = new TextDocument(filePath);
-        _history = new TextDocumentHistory(_currentDocument);
+        _currentFile = new TextFile(filePath);
+        _history = new TextFileHistory(_currentFile);
 
         string successMessage = $"File loaded successfully: {filePath}";
         Console.WriteLine(successMessage);
       } catch (Exception exception) {
         string errorMessage = $"Error opening file: {exception.Message}";
         Console.WriteLine(errorMessage);
-        _currentDocument = null;
+        _currentFile = null;
       }
     }
 
@@ -627,23 +644,23 @@ namespace TextFileEditor {
       }
 
       try {
-        _currentDocument = new TextDocument(filePath, contentBuilder.ToString());
-        _history = new TextDocumentHistory(_currentDocument);
-        _currentDocument.SaveToFile();
+        _currentFile = new TextFile(filePath, contentBuilder.ToString());
+        _history = new TextFileHistory(_currentFile);
+        _currentFile.SaveToFile();
 
         string successMessage = $"File created successfully: {filePath}";
         Console.WriteLine(successMessage);
       } catch (Exception exception) {
         string errorMessage = $"Error creating file: {exception.Message}";
         Console.WriteLine(errorMessage);
-        _currentDocument = null;
+        _currentFile = null;
       }
     }
 
     private void ViewContent() {
-      string header = $"\n--- CONTENT OF {_currentDocument.FilePath} ---\n";
+      string header = $"\n--- CONTENT OF {_currentFile.FilePath} ---\n";
       Console.WriteLine(header);
-      Console.WriteLine(_currentDocument.Content);
+      Console.WriteLine(_currentFile.Content);
       Console.WriteLine("\n--- END OF CONTENT ---");
     }
 
@@ -659,7 +676,8 @@ namespace TextFileEditor {
       }
 
       _history.SaveState();
-      _currentDocument.Content = contentBuilder.ToString();
+      _currentFile.Content = contentBuilder.ToString();
+      _currentFile.UpdateWordFrequency();
 
       string successMessage = "Content updated.";
       Console.WriteLine(successMessage);
@@ -667,7 +685,7 @@ namespace TextFileEditor {
 
     private void SaveFile() {
       try {
-        _currentDocument.SaveToFile();
+        _currentFile.SaveToFile();
         string successMessage = "File saved successfully.";
         Console.WriteLine(successMessage);
       } catch (Exception exception) {
@@ -681,9 +699,9 @@ namespace TextFileEditor {
       string newPath = Console.ReadLine();
 
       try {
-        string oldPath = _currentDocument.FilePath;
-        _currentDocument.FilePath = newPath;
-        _currentDocument.SaveToFile();
+        string oldPath = _currentFile.FilePath;
+        _currentFile.FilePath = newPath;
+        _currentFile.SaveToFile();
 
         string successMessage = $"File saved as: {newPath}";
         Console.WriteLine(successMessage);
@@ -715,22 +733,33 @@ namespace TextFileEditor {
       }
     }
 
-    private void BinarySerialize() {
+    private void ResetToInitialState() {
+      try {
+        _history.ResetToInitialState();
+        string successMessage = "Reset to initial state.";
+        Console.WriteLine(successMessage);
+      } catch (Exception exception) {
+        string errorMessage = $"Cannot reset: {exception.Message}";
+        Console.WriteLine(errorMessage);
+      }
+    }
+
+    private void JsonSerialize() {
       try {
         Console.Write("\nEnter target file path (or press Enter for default): ");
         string targetPath = Console.ReadLine();
 
         if (string.IsNullOrWhiteSpace(targetPath)) {
-          _currentDocument.BinarySerialize();
-          string defaultMessage = $"Binary serialized to: {_currentDocument.FilePath}.bin";
+          _currentFile.JsonSerialize();
+          string defaultMessage = $"JSON serialized to: {_currentFile.FilePath}.json";
           Console.WriteLine(defaultMessage);
         } else {
-          _currentDocument.BinarySerialize(targetPath);
-          string customMessage = $"Binary serialized to: {targetPath}";
+          _currentFile.JsonSerialize(targetPath);
+          string customMessage = $"JSON serialized to: {targetPath}";
           Console.WriteLine(customMessage);
         }
       } catch (Exception exception) {
-        string errorMessage = $"Error during binary serialization: {exception.Message}";
+        string errorMessage = $"Error during JSON serialization: {exception.Message}";
         Console.WriteLine(errorMessage);
       }
     }
@@ -741,11 +770,11 @@ namespace TextFileEditor {
         string targetPath = Console.ReadLine();
 
         if (string.IsNullOrWhiteSpace(targetPath)) {
-          _currentDocument.XmlSerialize();
-          string defaultMessage = $"XML serialized to: {_currentDocument.FilePath}.xml";
+          _currentFile.XmlSerialize();
+          string defaultMessage = $"XML serialized to: {_currentFile.FilePath}.xml";
           Console.WriteLine(defaultMessage);
         } else {
-          _currentDocument.XmlSerialize(targetPath);
+          _currentFile.XmlSerialize(targetPath);
           string customMessage = $"XML serialized to: {targetPath}";
           Console.WriteLine(customMessage);
         }
@@ -756,7 +785,7 @@ namespace TextFileEditor {
     }
 
     private void CloseFile() {
-      _currentDocument = null;
+      _currentFile = null;
       _history = null;
       string closeMessage = "File closed.";
       Console.WriteLine(closeMessage);
@@ -854,7 +883,7 @@ namespace TextFileEditor {
         _currentIndex = searcher.CreateIndex();
 
         string successMessage = $"\nIndexing complete!\n" +
-                               $"Found {_currentIndex.Documents.Count} documents\n" +
+                               $"Found {_currentIndex.Files.Count} files\n" +
                                $"Found {_currentIndex.KeywordIndex.Count} unique keywords";
         Console.WriteLine(successMessage);
 
