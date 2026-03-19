@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using System.Xml.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text.RegularExpressions;
 
 namespace TextFileEditor {
@@ -104,31 +104,26 @@ namespace TextFileEditor {
       }
     }
 
-    // JSON serialization using System.Text.Json
-    public void JsonSerialize(string targetFilePath = null) {
-      string filePath = targetFilePath ?? FilePath + ".json";
+    // Binary serialization
+    public void BinarySerialize(string targetFilePath = null) {
+      string filePath = targetFilePath ?? FilePath + ".bin";
 
-      JsonSerializerOptions options = new JsonSerializerOptions {
-        WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-      };
-      
-      string json = JsonSerializer.Serialize(this, options);
-      File.WriteAllText(filePath, json, Encoding.UTF8);
+      using (FileStream fileStream = new FileStream(filePath, FileMode.Create)) {
+        BinaryFormatter formatter = new BinaryFormatter();
+        formatter.Serialize(fileStream, this);
+      }
     }
 
-    // JSON deserialization using System.Text.Json
-    public static TextFile JsonDeserialize(string filePath) {
+    // Binary deserialization
+    public static TextFile BinaryDeserialize(string filePath) {
       if (!File.Exists(filePath)) {
         throw new FileNotFoundException(filePath);
       }
 
-      string json = File.ReadAllText(filePath, Encoding.UTF8);
-      JsonSerializerOptions options = new JsonSerializerOptions {
-        PropertyNameCaseInsensitive = true
-      };
-      
-      return JsonSerializer.Deserialize<TextFile>(json, options);
+      using (FileStream fileStream = new FileStream(filePath, FileMode.Open)) {
+        BinaryFormatter formatter = new BinaryFormatter();
+        return (TextFile)formatter.Deserialize(fileStream);
+      }
     }
 
     // XML serialization
@@ -557,7 +552,7 @@ namespace TextFileEditor {
                    "5. Undo\n" +
                    "6. Redo\n" +
                    "7. Reset to initial state\n" +
-                   "8. JSON serialize\n" +
+                   "8. Binary serialize\n" +
                    "9. XML serialize\n" +
                    "10. Close file\n" +
                    "Your choice: ";
@@ -595,7 +590,7 @@ namespace TextFileEditor {
           break;
 
         case "8":
-          JsonSerialize();
+          BinarySerialize();
           break;
 
         case "9":
@@ -744,22 +739,22 @@ namespace TextFileEditor {
       }
     }
 
-    private void JsonSerialize() {
+    private void BinarySerialize() {
       try {
         Console.Write("\nEnter target file path (or press Enter for default): ");
         string targetPath = Console.ReadLine();
 
         if (string.IsNullOrWhiteSpace(targetPath)) {
-          _currentFile.JsonSerialize();
-          string defaultMessage = $"JSON serialized to: {_currentFile.FilePath}.json";
+          _currentFile.BinarySerialize();
+          string defaultMessage = $"Binary serialized to: {_currentFile.FilePath}.bin";
           Console.WriteLine(defaultMessage);
         } else {
-          _currentFile.JsonSerialize(targetPath);
-          string customMessage = $"JSON serialized to: {targetPath}";
+          _currentFile.BinarySerialize(targetPath);
+          string customMessage = $"Binary serialized to: {targetPath}";
           Console.WriteLine(customMessage);
         }
       } catch (Exception exception) {
-        string errorMessage = $"Error during JSON serialization: {exception.Message}";
+        string errorMessage = $"Error during binary serialization: {exception.Message}";
         Console.WriteLine(errorMessage);
       }
     }
