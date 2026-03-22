@@ -43,8 +43,28 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FileIndex.cs" />
+    <Compile Include="FileNotFoundException.cs" />
+    <Compile Include="IFileIndex.cs" />
+    <Compile Include="IIndexingApplication.cs" />
+    <Compile Include="IndexingApplication.cs" />
+    <Compile Include="ISearchResult.cs" />
+    <Compile Include="ITextEditor.cs" />
+    <Compile Include="ITextFileHistory.cs" />
+    <Compile Include="ITextFileMemento.cs" />
+    <Compile Include="ITextFileOriginator.cs" />
+    <Compile Include="ITextFileSearcher.cs" />
+    <Compile Include="ITextFileSerialization.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="SearchResult.cs" />
+    <Compile Include="TextEditor.cs" />
+    <Compile Include="TextFile.cs" />
+    <Compile Include="TextFileException.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TextFileHistory.cs" />
+    <Compile Include="TextFileMemento.cs" />
+    <Compile Include="TextFileOriginator.cs" />
+    <Compile Include="TextFileSearcher.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
